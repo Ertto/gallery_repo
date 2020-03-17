@@ -26,7 +26,7 @@ class ApiHandler {
           .toList()
           .cast<Photo>();
     } catch (e) {
-      data = [];
+      throw e;
     }
 
     return data;

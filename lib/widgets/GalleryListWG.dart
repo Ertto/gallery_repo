@@ -1,5 +1,10 @@
+import 'dart:async';
+
+import 'package:connectivity/connectivity.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image/network.dart';
 import 'package:gallerymobi/utils/ApiHendler.dart';
+import 'package:gallerymobi/utils/LoadState.dart';
 import 'package:gallerymobi/utils/Photo.dart';
 import 'package:gallerymobi/pages/PhotoPG.dart';
 
@@ -15,12 +20,17 @@ class GalleryListWGState extends State<GalleryListWG> {
       "cf49c08b444ff4cb9e4d126b7e9f7513ba1ee58de7906e4360afc1a33d1bf4c0");
   List<Photo> _data = [];
   int _page = 1;
-  bool _loading = false;
+  LoadState _loadState = LoadState.ready;
+  StreamSubscription changeConnection;
+
 
   @override
   void initState() {
     super.initState();
-    loadMore();
+
+    changeConnection = Connectivity().onConnectivityChanged.listen(_connectListener);
+
+    this._loadMore();
   }
 
   @override
@@ -33,32 +43,52 @@ class GalleryListWGState extends State<GalleryListWG> {
     );
   }
 
+  @override
+  void dispose() {
+    changeConnection.cancel();
+    super.dispose();
+  }
+
   Widget _builder(BuildContext context, int pos) {
-    if (!this._loading && pos >= this._data.length - 3) {
-      loadMore();
+    if (this._loadState == LoadState.ready && pos >= this._data.length - 3) {
+      this._loadMore();
     }
     return GestureDetector(
-      child: Image.network(
-        _data[pos].thumb,
+      child: Image(
+        image: NetworkImageWithRetry(this._data[pos].thumb),
         fit: BoxFit.cover,
       ),
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => PhotoPG(_data[pos].full)),
+          MaterialPageRoute(builder: (context) => PhotoPG(this._data[pos].full)),
         );
       },
     );
   }
 
-  void loadMore() async {
-    _loading = true;
-    _page++;
-    List<Photo> res = await _api.loadPhotos(_page);
-    _loading = false;
+  void _loadMore() async {
+    List<Photo> res;
+    this._loadState = LoadState.loading;
 
+    try {
+      res = await _api.loadPhotos(_page);
+    } catch (e) {
+      this._loadState = LoadState.error;
+      return;
+    }
+
+    this._page++;
+    this._loadState = LoadState.ready;
     setState(() {
-      _data.addAll(res);
+      this._data.addAll(res);
     });
   }
+
+  void _connectListener(ConnectivityResult result) {
+    if (this._loadState == LoadState.error && result != ConnectivityResult.none) {
+      this._loadMore();
+    }
+  }
+
 }
